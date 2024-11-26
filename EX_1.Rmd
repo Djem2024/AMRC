@@ -1,0 +1,301 @@
+---
+title: "Exercise 1"
+subtitle: "for Advanced Methods for Regression and Classification"
+author: "Dzhamilia Kulikieva"
+date: "23.10.2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Loading and Preprocessing
+
+## 1a. Loading the College data with ISLR package and investigating the structure and headings:
+
+```{r, echo=TRUE}
+data(College, package = 'ISLR')
+str(College)
+head(College)
+
+```
+
+The College dataset provides information about 777 colleges, describing their main characteristics. It includes details on college type (private or public), the number of applications, admissions, and enrollments, financial information (tuition, room and board, books), as well as quality indicators such as faculty qualifications and graduation rates.
+
+Our goal is to find a linear regression model which allows to predict the variable
+Apps, i.e. the number of applications received, using the remaining variables except of the
+variables Accept and Enroll.
+
+## 1b. Checking if there are missing values in the table and looking at the distribution of the Apps data:
+
+```{r, echo=TRUE}
+sum(is.na(College))
+hist(College$Apps)
+```
+
+We see that the table has no missing values but the histogram shows that the distribution of the variable College$Apps is highly positively skewed (with a long tail to the right). Most colleges receive a relatively small number of applications, while a few colleges have a much higher number of applications, resulting in this "long tail" effect.
+
+Such skewness can create issues for LRM, as they generally assume normally distributed errors and a balanced influence of all observations. To deal with this skewness and make the data more symmetric, a log transformation is often a suitable approach.
+
+## 1c. Making a logarithmic transformation of the variable Apps:
+
+```{r, echo=TRUE}
+College$log_Apps <- log(College$Apps + 1)
+College$Apps <- NULL 
+hist(College$log_Apps, main = "Histogram of Log(Apps)", xlab = 'log(Apps)')
+
+```
+
+After the log transformation, the distribution looks much more symmetric, and it is now closer to a normal distribution.
+
+# 2. Full Model: Estimation the full regression model and interpretion the results
+
+Let's  split the data randomly into training and test data (2/3 and 1/3): 
+
+```{r, echo=TRUE}
+set.seed(2024)
+sample_index <- sample(1:nrow(College), size = floor(2/3 * nrow(College)))
+train_data <- College[sample_index, ]
+test_data <- College[-sample_index, ]
+
+```
+
+## 2a. Bilding a complete regression model by using loc_Apps as the dependent variable and investigating the results:
+
+```{r, echo=TRUE}
+model <- lm(log_Apps ~ ., data = train_data)
+summary(model)
+```
+
+This linear regression model shows that several variables have a significant impact on the dependent variable log_Apps. The R² value (81.43%) indicates that the model describes the data well, and a number of predictors (such as PrivateYes, Accept, PhD, Grad.Rate etc) have a significant impact on the model, which is confirmed by their low p-values. However, some predictors do not have a significant influence, which could be considered when simplifying the model.
+
+Let's embed plots for the model:
+
+```{r, echo=TRUE, fig.width=7, fig.height=5}
+par(mfrow=c(2, 2))
+plot(model)
+```
+
+**Conclusions:**
+
+- Residuals vs Fitted Plot: We see that the red line is curved, indicating a nonlinear pattern. The points have a smaller spread at the beginning and in the middle of the range of predicted values, the spread increases for larger predicted values, indicating a heteroscedasticity. This suggests that the assumption of linearity and homoscedasticity is violated.
+
+- Q-Q Residuals: Most of the points are close to the diagonal line, indicating that the residuals are approximately normally distributed. However, there are some deviations at the ends, which suggest the presence of outliers or non-normality in the extreme values.
+
+- Scale-Location Plot: The red line shows an increasing trend, and the spread of points also increases as the fitted values increase. This indicates heteroscedasticity—the variance of residuals increases with the fitted values.The assumption of homoscedasticity is not satisfied.
+
+- Residuals vs Leverage Plot: There are several observations with high leverage, such as Brigham Young University at Provo. These observations may have a significant influence on the model.These influential points in the model violate the assumption that the model should not depend heavily on a few observations.
+
+**In general, the linear regression model has issues with nonlinearity, heteroscedasticity, influential observations, and minor normality deviations in residuals.**
+
+## 2b. Manually estimating the coefficients:
+
+```{r, echo=TRUE}
+X <- model.matrix(log_Apps ~ ., data = train_data)
+y <- train_data$log_Apps
+beta_hat <- solve(t(X) %*% X) %*% t(X) %*% y
+beta_hat
+```
+R handles binary variables by creating indicator variable, such as PrivateYes:
+
+1 if the college is private (Private = "Yes").
+0 if the college is public (Private = "No")
+
+If a college is private (PrivateYes = 1), the expected value of log_Apps decreases by 0.501 (-5.010121e-01) units compared to a public college (PrivateYes = 0), assuming all other variables are held constant.
+
+The coefficients obtained from lm() match the manually calculated coefficients using model.matrix()
+
+## 2c. Comparing graphically the observed and the predicted values of log_Apps for the train_data and for test_data:
+
+
+```{r, echo=TRUE}
+predicted_train <- predict(model, train_data)
+predicted_test <- predict(model, test_data)
+```
+
+```{r, echo=TRUE, fig.width=6, fig.height=4}
+
+plot(train_data$log_Apps, predicted_train, xlab = 'Observed', ylab = 'Predicted',
+main = 'Training Data')
+abline(0,1, col = 'red', lty = 2)
+
+plot(test_data$log_Apps, predicted_test, xlab = 'Observed', ylab = 'Predicted',
+main = 'Test Data')
+abline(0,1, col = 'red', lty = 2)
+
+```
+
+
+**For the train data:** 
+
+- Points are mostly clustered along the red line, indicating that the model predicts values reasonably well on the training data. However, there are some points that are far from the line, which indicates model errors for those observations.
+
+- Points are relatively tightly distributed along the line in the central region, meaning the model predicts adequately for most observations. However, there are some distant points, indicating outliers or cases where the model struggles to predict well for certain values of the variables.
+
+**For the test data:**
+
+- Unlike the plot for the training data, here the points are less tightly clustered along the red line, and there are more outliers, especially in the area with high predicted values (above 10). This indicates that the model has higher errors on the test data compared to the training data, which may suggest overfitting.
+
+- In the central part of the plot, the points are still grouped along the ideal line, indicating that the model is able to predict values adequately for most observations. However, there are outliers, such as the point above y = 14, which indicates difficulties for the model in predicting certain observations.
+
+
+## 2d. Computing the RMSE separately for training and test data:
+
+```{r, echo=TRUE}
+rmse_train <- sqrt(mean((train_data$log_Apps - predicted_train)^2)) 
+rmse_test <- sqrt(mean((test_data$log_Apps - predicted_test)^2)) 
+
+rmse_train
+rmse_test
+```
+**Conclusions:**
+
+The RMSE value for the test data is higher than for the training data (0.6340 vs 0.4565).
+This indicates that the model performs better on the data it was trained on than on new data. The difference in RMSE suggests that the model may exhibit signs of overfitting — meaning it does not generalize as well to new data.
+
+On the other hand, a low RMSE value for the train data indicates that the model errors are small, and the model makes good predictions. The RMSE for the test data (0.6340) is also not too high, but it is higher than for the training data, which may be expected since the test data was not used for training.
+
+
+# 3. Reduced model: Exclution not significant variables and computing the LS-estimator
+
+```{r, echo=TRUE}
+reduced_model <- lm(log_Apps ~ Private + Accept + Top10perc + F.Undergrad + P.Undergrad
+                    + Room.Board + Books + PhD + S.F.Ratio + Expend + Grad.Rate, 
+                    data = train_data)
+summary(reduced_model)
+```
+## 3a. Comparing results: full model vs redused model:
+
+In the reduced model, all input variables are now significant at the 0.05 level.
+
+However, it's not always expected that all input variables will be significant in a reduced model. Variables can act as confounders, and removing them can change the relationships of others, possibly making them non-significant. Additionally, depending on how the data is split into training and test sets, or how samples are collected, different predictors may appear significant or non-significant.
+
+Furthermore, due to interdependence between variables, when certain variables are removed, it can impact the statistical significance of the remaining variables.
+
+## 3b. Visualising the fit and the prediction from a new model:
+
+```{r, echo=TRUE}
+
+predicted_train_reduced <- predict(reduced_model, train_data)
+predicted_test_reduced <- predict(reduced_model, test_data)
+
+plot(train_data$log_Apps, predicted_train_reduced, xlab = "Observed", ylab = "Predicted", 
+     main = "Reduced Model - Training Data")
+abline(0, 1, col = "red", lty = 2)
+
+plot(test_data$log_Apps, predicted_test_reduced, xlab = "Observed", ylab = "Predicted", 
+     main = "Reduced Model - Test Data")
+abline(0, 1, col = "red", lty = 2)
+
+```
+
+
+## 3c. Computing the RMSE for the new model:
+
+```{r, echo=TRUE}
+rmse_train_reduced <- sqrt(mean((train_data$log_Apps - predicted_train_reduced)^2))
+rmse_test_reduced <- sqrt(mean((test_data$log_Apps - predicted_test_reduced)^2))
+
+rmse_train_reduced
+rmse_test_reduced
+
+```
+
+For the reduced model, we would expect similar or slightly higher RMSE, because removing less significant variables could lead to a small increase in error but reduce model complexity, making it easier to interpret. 
+
+In our case, the RMSE for the reduced model is indeed slightly higher compared to the full model(0.4564835, 0.6340315), confirming this expectation.
+
+
+## 3d. Comparing two models with anova:
+
+```{r, echo=TRUE}
+anova(model, reduced_model)
+
+```
+The reduced model has more degrees of freedom (506 vs. 500 in the full model), making it simpler with fewer parameters to estimate and less prone to overfitting.
+
+The reduced model's RSS is 109.19, slightly higher than the full model's 107.94, indicating a small increase in model error after removing some variables — a trade-off between complexity and accuracy.
+
+The p-value of 0.4464 is much greater than the typical significance level (e.g., 0.05), and with F = 0.9677 (not large), it means that the reduced model is not significantly worse than the full model. Therefore, the reduced model is preferred for its simpler structure without a significant loss in quality.
+
+
+# 4. Performing variable selection based on stepwise regression, using the function step()
+
+```{r, echo=TRUE}
+
+forward_model <- step(lm(log_Apps ~ 1, data = train_data), direction = "forward",
+                      scope = formula(model))
+summary(forward_model)
+
+
+```
+
+
+```{r, echo=TRUE}
+
+backward_model <- step(model, direction = "backward")
+summary(backward_model)
+
+
+```
+
+We see that there isn't a difference in terms of significant/non-significant predictors between the two models and they both ended up selecting only the statistically significant predictors that contributed meaningfully to the model.
+
+
+Let's compare the resulting models with the RMSE, and with plots of response vs predicted values.
+
+**For the forward selection model:**
+
+```{r, echo=TRUE}
+predicted_forward_train <- predict(forward_model, train_data)
+predicted_forward_test <- predict(forward_model, test_data)
+
+rmse_train_forward <- sqrt(mean((train_data$log_Apps - predicted_forward_train)^2))
+rmse_test_forward <- sqrt(mean((test_data$log_Apps - predicted_forward_test)^2))
+rmse_train_forward
+rmse_test_forward
+
+```
+
+**For the backward selection model:**
+
+```{r, echo=TRUE}
+predicted_backward_train <- predict(backward_model, train_data)
+predicted_backward_test <- predict(backward_model, test_data)
+
+rmse_train_backward <- sqrt(mean((train_data$log_Apps - predicted_backward_train)^2))
+rmse_test_backward <- sqrt(mean((test_data$log_Apps - predicted_backward_test)^2))
+
+rmse_train_backward
+rmse_test_backward
+```
+
+
+The RMSE values indicate that both models have the same error for training and test data, suggesting similar predictive performance.
+
+```{r, echo=TRUE}
+
+plot(train_data$log_Apps, predicted_forward_train, xlab = "Observed", ylab = "Predicted",
+     main = "Forward Selection - Training Data")
+abline(0, 1, col = "red", lty = 2)
+
+plot(test_data$log_Apps, predicted_forward_test, xlab = "Observed", ylab = "Predicted",
+     main = "Forward Selection - Test Data")
+abline(0, 1, col = "red", lty = 2)
+
+plot(train_data$log_Apps, predicted_backward_train, xlab = "Observed", ylab = "Predicted",
+     main = "Backward Selection - Training Data")
+abline(0, 1, col = "red", lty = 2)
+
+plot(test_data$log_Apps, predicted_backward_test, xlab = "Observed", ylab = "Predicted",
+     main = "Backward Selection - Test Data")
+abline(0, 1, col = "red", lty = 2)
+
+```
+
+Based on the provided plots and RMSE results, we conclude that both models have identical predictors and yield similar outcomes. Therefore, there are no significant differences in their predictive ability, and both models have similar levels of error on both the training and test datasets.
+
+**In general, the results for the reduced model, created using the linear model (lm) with only the significant predictors, match the models obtained through both forward and backward selection. This indicates that all three approaches resulted in identical models, confirming consistency in the selection of significant variables across the different methods.**
+
+

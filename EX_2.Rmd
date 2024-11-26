@@ -1,0 +1,244 @@
+---
+title: "Exercise 2"
+subtitle: "for Advanced Methods for Regression and Classification"
+author: "Dzhamilia Kulikieva"
+date: 31.10.2024
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup-packages, include=FALSE}
+library(cvTools)
+library(MASS)
+library(leaps)
+```
+## Data investigation and preparation
+
+This data set contains information about construction costs (df$y) of real estate single-family
+residential apartments in Tehran, Iran. Let's see the structure of the data  and its variables format.
+
+```{r, echo=TRUE}
+load("/Users/djem/Downloads/building.RData")
+head(df)
+str(df)
+
+```
+To begin to work with this data set, let's split the samples randomly into training (2/3) and test (1/3) data.
+
+```{r, echo=TRUE}
+set.seed(2024)
+sample_index <- sample(1:nrow(df), size = floor(2/3 * nrow(df)))
+train_data <- df[sample_index, ]
+test_data <- df[-sample_index, ]
+```
+
+# 1. Computing the full model with lm() using train data
+
+```{r, echo=TRUE}
+model <- lm(y ~ ., data = train_data)
+summary(model)
+```
+
+There are a few significant predictors with p-values below 0.05, such as PhysFin1, PhysFin5, PhysFin6, Econ2.lag1, among others. The large number of variables with high p-values suggests that they may not be significant to the model and could be removed for simplification.
+
+
+## 1(a) Visualisation of fitted values versus response.
+
+```{r, echo=TRUE, fig.width=7, fig.height=5}
+predicted_train <- predict(model, train_data)
+
+```
+
+
+```{r, echo=TRUE, fig.width=6, fig.height=4}
+
+plot(train_data$y, predicted_train, xlab = 'Observed', ylab = 'Predicted',
+main = 'Training Data')
+abline(0,1, col = 'red', lty = 2)
+
+```
+
+The points are generally close to the line, indicating good model performance for most data. However, there are some outliers (notably in the top right) where predicted values significantly deviate, suggesting that the model struggles with extreme values or there are anomalies.
+
+```{r, echo=TRUE, fig.width=7, fig.height=5}
+rmse_train <- sqrt(mean((train_data$y - predicted_train)^2))
+print(rmse_train)
+
+```
+
+With an RMSE of 0.1759, the model demonstrates a good fit, indicating small average prediction errors. 
+
+## 1(b)  Using cvFit() function for model evaluation based on crossvalidation (CV).
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE, fig.width=7, fig.height=5}
+set.seed(123)
+cv_result <- cvFit(model, data = train_data, y = train_data$y, cost = rmspe, 
+                   K = 5, R = 100)
+plot(cv_result)
+```
+
+Most metric values fall within a narrow range (inside the box), indicating that the model shows fairly consistent results in the majority of folds. However, the presence of outliers suggests that the model performed noticeably worse in some folds.
+
+
+## 1(c) Using cost=rtmspe to handle outliers.
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE, fig.width=7, fig.height=5}
+set.seed(123)
+cv_result_rtmspe <- cvFit(model, data = train_data, y = train_data$y, cost = rtmspe, 
+                          K = 5, R = 100)
+plot(cv_result_rtmspe)
+
+```
+Here RTMSPE measures the percentage difference between predicted and actual values, but unlike RMSPE, it trims a certain percentage of extreme values to reduce the effect of outliers. 
+
+This trimming helps make the evaluation more representative of the model's general performance. As we can see, the boxplot in this case shows more stable results: the median is in the center, a narrow interquartile range and fewer outliers.
+
+
+## 1(d) Predicting the response for the test data and visualizing the result.
+
+```{r, echo=TRUE, warning=FALSE, message=FALSE, fig.width=7, fig.height=5}
+predicted_test <- predict(model, test_data)
+
+rmse_test <- sqrt(mean((test_data$y - predicted_test)^2))
+print(rmse_test)
+
+plot(test_data$y, predicted_test, xlab = 'Observed', ylab = 'Predicted', 
+     main = 'Test Data')
+abline(0, 1, col = 'red', lty = 2)
+
+
+```
+The model shows reasonable accuracy on the test data, but there is greater variance compared to the training data, which may indicate slight overfitting. The presence of outliers suggests the need for model improvement.
+
+With an RMSE of 0.4190 on the test data, the model's error is larger compared to the training set (vs 0.1759 on train data), indicating reduced accuracy when applied to unseen data. This suggests that the model might not generalize as well, possibly due to overfitting. 
+
+
+# 2. Best subset regression with the function regsubsets().
+
+As number of predictors in the initial model is too big, in order to use regsubsets() we need first to reduce the predictors.
+
+## 2(a) Using stepAIC to perform step-by-step elimination of insignificant predictors, and then applying the regsubsets() function to the result.
+
+
+```{r, echo=TRUE, fig.width=7, fig.height=5}
+reduced_model <- stepAIC(model, direction = 'backward', trace = FALSE)
+summary(reduced_model)
+
+```
+
+Now we have reduced model to 57 predictors out of 190. Let's try to reduced the number of predictors to 50 (as it's recommended in the task) by applying step() function with backward selection method. steps = 7 is used to limit the number of variables in the model and reduce the model from 57 predictors to about 50.
+
+
+```{r, echo=TRUE, fig.width=7, fig.height=5}
+
+
+initial_model <- lm(y ~ START.YEAR + COMPLETION.YEAR + COMPLETION.QUARTER + 
+    PhysFin1 + PhysFin2 + PhysFin3 + PhysFin5 + PhysFin6 + PhysFin8 + 
+    Econ1 + Econ2 + Econ3 + Econ4 + Econ5 + Econ6 + Econ7 + Econ8 + 
+    Econ9 + Econ13 + Econ16 + Econ17 + Econ18 + Econ19 + Econ1.lag1 + 
+    Econ2.lag1 + Econ3.lag1 + Econ4.lag1 + Econ5.lag1 + Econ6.lag1 + 
+    Econ7.lag1 + Econ9.lag1 + Econ10.lag1 + Econ11.lag1 + Econ12.lag1 + 
+    Econ13.lag1 + Econ15.lag1 + Econ17.lag1 + Econ18.lag1 + Econ19.lag1 + 
+    Econ1.lag2 + Econ2.lag2 + Econ3.lag2 + Econ5.lag2 + Econ6.lag2 + 
+    Econ7.lag2 + Econ8.lag2 + Econ11.lag2 + Econ13.lag2 + Econ15.lag2 + 
+    Econ16.lag2 + Econ18.lag2 + Econ19.lag2 + Econ1.lag3 + Econ2.lag3 + 
+    Econ3.lag3 + Econ4.lag3 + Econ5.lag3, data = train_data)
+
+
+final_model <- step(initial_model, direction = "backward", steps = 7, trace = FALSE)
+
+summary(final_model)
+
+
+```
+
+As we see, the number of predictors has't decreased after executing the step(), this may mean that according to the AIC criterion, none of the predictors turned out to be insignificant enough to be excluded from the model. 
+
+Let's try using the regsubsets() function with the 57 predictors, that were defined in the previous steps, and with a maximum model size of 10 regressors.
+
+```{r, echo=TRUE, fig.width=7, fig.height=5}
+best_subset <- regsubsets(y ~ START.YEAR + COMPLETION.YEAR + COMPLETION.QUARTER + 
+    PhysFin1 + PhysFin2 + PhysFin3 + PhysFin5 + PhysFin6 + PhysFin8 + 
+    Econ1 + Econ2 + Econ3 + Econ4 + Econ5 + Econ6 + Econ7 + Econ8 + 
+    Econ9 + Econ13 + Econ16 + Econ17 + Econ18 + Econ19 + Econ1.lag1 + 
+    Econ2.lag1 + Econ3.lag1 + Econ4.lag1 + Econ5.lag1 + Econ6.lag1 + 
+    Econ7.lag1 + Econ9.lag1 + Econ10.lag1 + Econ11.lag1 + Econ12.lag1 + 
+    Econ13.lag1 + Econ15.lag1 + Econ17.lag1 + Econ18.lag1 + Econ19.lag1 + 
+    Econ1.lag2 + Econ2.lag2 + Econ3.lag2 + Econ5.lag2 + Econ6.lag2 + 
+    Econ7.lag2 + Econ8.lag2 + Econ11.lag2 + Econ13.lag2 + Econ15.lag2 + 
+    Econ16.lag2 + Econ18.lag2 + Econ19.lag2 + Econ1.lag3 + Econ2.lag3 + 
+    Econ3.lag3 + Econ4.lag3 + Econ5.lag3, data = train_data, nvmax = 10, really.big = TRUE)
+summary(best_subset)
+
+
+```
+
+We see that the function searched for the best subset for each size, starting from one predictor and up to 10 predictors. This means that she was looking for the best model with 1 predictor, with 2 predictors, and so on, up to 10 predictors.
+
+As a result, we have the model with 10 predictors (last line): START.YEAR, COMPLETION.YEAR, COMPLETION.QUARTER, PhysFin1, PhysFin5, PhysFin6, PhysFin8, Econ3, Econ7.lag2, and Econ13.lag2.
+
+## 2(b) Visualising the result of regsubsets() function
+
+
+```{r, echo=TRUE, fig.width=10, fig.height=7}
+plot(best_subset, scale = "bic")
+
+```
+The most significant predictors are those with the most columns going up the Y axis. The graph shows that several predictors significantly lower the BIC value. This means that they have the greatest impact on improving the model.
+
+In the graph, the names of the predictors are signed only through one. Upon closer examination, we see that the best model is with following predictors: START.YEAR, COMPLETION.YEAR, COMPLETION.QUARTER, PhysFin1, PhysFin5, PhysFin6, PhysFin8, Econ3, Econ7.lag2, and Econ13.lag2.
+
+## 2(c) Applying lm() on the final best model and comparing the results with the previous ones(from (1b) and (1c)).
+
+```{r, echo=TRUE, fig.width=7, fig.height=5}
+
+final_model <- lm(y ~ START.YEAR + COMPLETION.YEAR + COMPLETION.QUARTER + 
+                  PhysFin1 + PhysFin5 + PhysFin6 + PhysFin8 + 
+                  Econ3 + Econ7.lag2 + Econ13.lag2, data = train_data)
+
+summary(final_model)
+
+```
+
+The full model(from 1(a)) has a slightly better fit, as indicated by the smaller RSE and higher R² values. However, the difference with the reduced model is relatively small. Therefore, the reduced model is a good compromise between model fit quality and complexity, as reducing the number of predictors(from 73 to 10) didn't significantly affect the model's ability to explain the data.
+
+
+```{r, echo=TRUE, fig.width=7, fig.height=5}
+set.seed(123)
+cv_result_final <- cvFit(final_model, data = train_data, y = train_data$y, cost = rtmspe, 
+                         K = 5, R = 100)
+plot(cv_result_final)
+
+```
+Removing redundant features reduced variability and improved stability, resulting in more consistent cross-validation performance. The model now generalizes better.
+
+Notably, the median is centered within the box, indicating a symmetric distribution, and the narrow IQR suggests low variability. The whiskers show no significant outliers, and the absence of outliers points to more stable results compared to previous models (1(b),1(c)).
+
+
+## 2(d)  Predicting the response for the test data and visualising the result.
+
+```{r, echo=TRUE, fig.width=7, fig.height=5}
+predicted_final_test <- predict(final_model, test_data)
+
+rmse_final_test <- sqrt(mean((test_data$y - predicted_final_test)^2))
+print(rmse_final_test)
+
+
+plot(test_data$y, predicted_final_test, xlab = 'Observed', ylab = 'Predicted', 
+     main = 'Test Data - Best Subset Model')
+abline(0, 1, col = 'red', lty = 2)
+
+
+```
+
+The RMSE on the test data decreased significantly from 0.4190 for the full model to 0.2520 for the final model. This indicates that the final model, after feature selection, has a much lower prediction error on unseen data, suggesting better generalization and improved performance.
+
+Some points on the plot deviate noticeably from the line, which indicates the presence of prediction errors. However, their number is less than in the case of the full model(1(d)), which is an improvement.
+
+
+
+
+

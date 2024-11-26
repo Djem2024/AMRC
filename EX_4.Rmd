@@ -1,0 +1,286 @@
+---
+title: "Exercise 4"
+subtitle: "for Advanced Methods for Regression and Classification"
+author: "Dzhamilia Kulikieva"
+date: 13.11.2024
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup-packages, include=FALSE}
+library(glmnet)
+```
+
+```{r, echo=TRUE}
+load("/Users/djem/Downloads/building.RData")
+
+```
+
+
+```{r, echo=TRUE}
+set.seed(2024)
+sample_index <- sample(1:nrow(df), size = floor(2/3 * nrow(df)))
+train_data <- df[sample_index, ]
+test_data <- df[-sample_index, ]
+```
+
+# 1. Ridge Regression
+## 1a. Ridge Regression with alpha = 0
+
+```{r, echo=TRUE}
+# Training feature matrix and response vector
+X_train <- as.matrix(train_data[, -1])  # Features (all columns except the first)
+y_train <- train_data[, 1]  # Response (first column)
+
+# Build the Ridge regression model with alpha = 0
+ridge_model <- glmnet(X_train, y_train, alpha = 0)
+
+# Plot the model
+plot(ridge_model)
+```
+
+The plot shows the relationship between the coefficients and the values of lambda. The X-axis represents the log(lambda) values, and the Y-axis displays the coefficient values. We see how the coefficients shrink as lambda increases.
+
+**Parameter lambda** is the regularization parameter that controls the degree of shrinkage for the coefficients. The higher the lambda, the stronger the regularization, leading to smaller coefficient values. By default, the gmnet function does't specify a specific value for lambda, and instead a range of values of lambda is used.
+
+**Parameter alpha** controls the type of regression. When alpha = 0, it uses Ridge regression (L2 regularization). This means we limit the magnitude of the coefficients but do not force them to become zero, as in Lasso.
+
+
+## 1b. Cross-Validation with cv.glmnet()
+
+```{r, echo = TRUE}
+# Use cv.glmnet() to perform cross-validation on the training set
+cv_ridge_model <- cv.glmnet(X_train, y_train, alpha = 0)
+
+# Plot the results of the cross-validation
+plot(cv_ridge_model)
+```
+
+
+cv.glmnet() performs k-fold cross-validation to find the optimal value of lambda. The plot displays the mean cross-validation error for each value of lambda. Dashed vertical lines indicate the optimal lambda values: one for the minimum error (lambda.min) and one for the one-standard-error rule (lambda.1se).The standard approach is to select the lambda that yields the minimum MSE (lambda.min represented by first dashed line) ~ -2,70. However, this can sometimes lead to overfitting because the model is fine-tuned to the training data with minimal error. To avoid overfitting and still get a good fit, the second dashed line  (lambda.1se) might be the better choice ~ -1,80. It provides a balance between bias and variance by regularizing the model slightly more than lambda.min.
+
+
+```{r, echo=TRUE}
+# Get the optimal lambda value
+optimal_lambda <- cv_ridge_model$lambda.min
+cat("Optimal lambda: ", optimal_lambda, "\n")
+
+# Get the coefficients of the model for the optimal lambda
+ridge_coefficients <- coef(cv_ridge_model, s = "lambda.min")
+print(ridge_coefficients)
+```
+The function gives us the precise lambda value that minimizes the MSE, which appears slightly different from the visual estimate on the plot. 
+
+
+## 1c.Predictions and Calculation of RMSE on the test_data
+
+```{r, echo=TRUE}
+# Prepare the test data
+X_test <- as.matrix(test_data[, -1])  # Features (all columns except the first)
+y_test <- test_data[, 1]  # Response (first column)
+
+# Make predictions using the optimal Ridge model
+predictions_ridge <- predict(cv_ridge_model, newx = X_test, s = "lambda.min")
+
+# Plot the predicted vs actual values
+plot(y_test, predictions_ridge, main = "Ridge Regression: Predicted vs Actual",
+     xlab = "Actual Values", ylab = "Predicted Values", pch = 19, col = "blue")
+abline(a = 0, b = 1, col = "red")  # Add a 45-degree line for comparison
+
+```
+
+
+```{r, echo=TRUE}
+# Calculate RMSE (Root Mean Squared Error)
+rmse_ridge <- sqrt(mean((predictions_ridge - y_test)^2))
+cat("RMSE for Ridge Regression: ", rmse_ridge, "\n")
+```
+
+The points generally follow a diagonal trend along the red line, which represents a good prediction line where predicted = observed. 
+
+The calculated RMSE of 0.2586 is relatively low, indicating that the average prediction error is small, and the model performs well on the test data. There is some scattering around the line, but most points are clustered closely, which suggests that the model captures the underlying pattern of the data effectively, with only minor deviations.
+
+The RMSE results for the PLS and PCR prediction models from the previous exercise (0.2519375) are almost the same as the RMSE for Ridge Regression (0.2586422).This similarity in RMSE values suggests that all three models—PLS, PCR, and Ridge Regression—are performing comparably in terms of predictive accuracy on this dataset. 
+
+
+# 2. Lasso Regression:
+
+## 2a. Lasso Regression with alpha = 1
+
+```{r,echo=TRUE}
+# Build the Lasso model with alpha = 1 (Lasso regression)
+lasso_model <- glmnet(X_train, y_train, alpha = 1)
+
+# Plot the model coefficients against log(lambda)
+plot(lasso_model)
+```
+At lower values of lambda (left side), there is minimal regularization, and most coefficients are non-zero, meaning the model includes almost all features. As lambda increases (moving right), many coefficients shrink toward zero and eventually become exactly zero, effectively removing those features from the model.
+
+
+## 2b. Cross-Validation with cv.glmnet() for the Lasso model
+
+```{r, echo=TRUE}
+
+# Perform cross-validation to select the optimal lambda for Lasso
+cv_lasso_model <- cv.glmnet(X_train, y_train, alpha = 1)
+
+# Plot the results of the cross-validation
+plot(cv_lasso_model)
+
+```
+
+The value of lambda with the minimum cross-validation error is approximately -5.3. This lambda is likely to result in more features with non-zero coefficients and may provide the most accurate predictions. The largest lambda within one standard error of the minimum error is approximately -3.99. This value will apply stronger regularization, potentially leading to fewer non-zero coefficients and offering a simpler model that balances accuracy and interpretability.
+
+
+## 2c. Predictions and Calculation of RMSE for the Lasso model
+
+```{r, echo=TRUE}
+
+# Get the optimal lambda value for Lasso regression
+optimal_lambda_lasso <- cv_lasso_model$lambda.min
+cat("Optimal lambda for Lasso: ", optimal_lambda_lasso, "\n")
+
+# Make predictions on the test data using the optimal Lasso model
+predictions_lasso <- predict(cv_lasso_model, newx = X_test, s = "lambda.min")
+
+# Plot the predicted vs actual values for Lasso regression
+plot(y_test, predictions_lasso, main = "Lasso Regression: Predicted vs Actual",
+     xlab = "Actual Values", ylab = "Predicted Values", pch = 19, col = "green")
+abline(a = 0, b = 1, col = "red")  # Add a 45-degree line for comparison
+
+```
+```{r, echo=TRUE}
+# Calculate the RMSE for the Lasso model
+rmse_lasso <- sqrt(mean((predictions_lasso - y_test)^2))
+cat("RMSE for Lasso Regression: ", rmse_lasso, "\n")
+
+```
+
+
+In Lasso regression, the optimal lambda of 0.0058 applies mild regularization, keeping more features in the model but potentially setting some coefficients to zero for feature selection. In Ridge regression, the optimal lambda of 0.0732 applies stronger regularization, shrinking all coefficients but retaining them, thus controlling multicollinearity without eliminating features.
+
+The plot for the Lasso model is very similar to the plot for the Ridge regression model, showing the relationship between the predicted and actual values.
+
+In summary, both models(Ridge regression and Lasso) perform similarly in terms of RMSE, with Lasso slightly outperforming Ridge. 
+
+
+# 3. Adaptive Lasso Regression:
+
+## 3a. Constructing Weights Based on Ridge Regression
+
+We will create weights by taking the inverse of the absolute values of the Ridge model coefficients (excluding zeros to avoid division by zero).
+
+```{r, echo=TRUE}
+# Extract Ridge model coefficients, excluding the intercept
+ridge_coefficients <- coef(cv_ridge_model, s = "lambda.min")[-1, ]  # Remove the intercept
+
+# Create weights by inverting the absolute values of the coefficients
+adaptive_weights <- 1 / abs(ridge_coefficients)
+adaptive_weights[is.infinite(adaptive_weights)] <- 0  # Set infinite values to zero
+
+# Check the length to ensure it matches the number of variables in X_train
+print(length(adaptive_weights))
+print(ncol(X_train))
+```
+
+Since both values are equal to 107, this means that the number of features in the data (X_train) corresponds to the number of adaptive weights, which confirms that the adaptive weights were correctly calculated for all features.
+
+
+## 3b. Building the Adaptive Lasso Model with penalty.factor
+
+We will use the weights in the penalty.factor parameter for the Adaptive Lasso model, setting alpha = 1.
+
+```{r, echo=TRUE}
+
+# Build Adaptive Lasso model using the corrected weights
+adaptive_lasso_model <- glmnet(X_train, y_train, alpha = 1, penalty.factor = adaptive_weights)
+
+# Plot the Adaptive Lasso model
+plot(adaptive_lasso_model, xvar = "lambda", label = TRUE)
+title("Coefficient Paths for Adaptive Lasso Regression")
+```
+We see that with increasing lambda, the coefficients tend to zero, and fewer features remain in the model with non-zero coefficients. Adaptive Lasso adjusts different features differently, based on their previous coefficients (compared to the usual Lasso), which allows us to focus on more important features.
+
+
+## 3c. Cross-Validation for Adaptive Lasso
+
+Let's run cross-validation to select the optimal lambda parameter for Adaptive Lasso
+
+```{r, echo=TRUE}
+
+# Cross-validation for Adaptive Lasso
+cv_adaptive_lasso_model <- cv.glmnet(X_train, y_train, alpha = 1, penalty.factor = adaptive_weights)
+
+# Visualize cross-validation results
+plot(cv_adaptive_lasso_model)
+
+# Get the optimal lambda value
+optimal_lambda_adaptive <- cv_adaptive_lasso_model$lambda.min
+cat("Optimal lambda for Adaptive Lasso: ", optimal_lambda_adaptive, "\n")
+```
+A lambda of 66.65166 indicates that the model is applying a relatively strong regularization compared to the standard Lasso or Ridge Regression models, which are often smaller and more directly chosen to reduce overfitting. A larger lambda in Adaptive Lasso lead to a simpler model with fewer non-zero coefficients, especially for features that are less significant according to the Ridge model. 
+
+
+
+
+## 3d. Prediction and RMSE Calculation for the Adaptive Lasso model
+
+We will use the optimal Adaptive Lasso model to make predictions on the test data and compare the RMSE with previous models.
+
+```{r, echo=TRUE}
+
+# Predictions on the test data using Adaptive Lasso
+predictions_adaptive_lasso <- predict(cv_adaptive_lasso_model, newx = X_test, s = "lambda.min")
+
+# Plot predicted vs actual values
+plot(y_test, predictions_adaptive_lasso, main = "Adaptive Lasso Regression: Predicted vs Actual",
+     xlab = "Actual Values", ylab = "Predicted Values", pch = 19, col = "purple")
+abline(a = 0, b = 1, col = "red")  # Add y=x line for comparison
+
+# Calculate RMSE for Adaptive Lasso
+rmse_adaptive_lasso <- sqrt(mean((predictions_adaptive_lasso - y_test)^2))
+cat("RMSE for Adaptive Lasso Regression: ", rmse_adaptive_lasso, "\n")
+```
+Lasso Regression(RMSE=0.2495514) appears to perform slightly better than Adaptive Lasso Regression based on the RMSE.
+This suggests that, for this dataset, the simpler regularization provided by standard Lasso might be more effective than the more complex adaptive regularization applied in the Adaptive Lasso.
+
+The plot for the Adaptive Lasso model closely mirrors that of the Lasso model, it suggests that both models have very similar predictive performance on the test data.
+
+
+## 3e. Comparing Coefficients with Lasso
+Retrieve the Adaptive Lasso coefficients for the optimal lambda value and compare them with the regular Lasso coefficients.
+
+```{r, echo=TRUE}
+
+# Extract Lasso model coefficients (excluding the intercept)
+lasso_coefficients <- coef(cv_lasso_model, s = "lambda.min")
+
+# Adaptive Lasso Coefficients
+adaptive_lasso_coefficients <- coef(cv_adaptive_lasso_model, s = "lambda.min")
+
+# Comparing Lasso and Adaptive Lasso coefficients
+print("Coefficients for Lasso Regression:")
+print(lasso_coefficients)
+print("Coefficients for Adaptive Lasso Regression:")
+print(adaptive_lasso_coefficients)
+```
+
+**Lasso Regression Coefficients:**
+The Lasso model has coefficients for some variables that are exactly zero, indicating feature selection.
+Variables like START.YEAR, PhysFin2, and many Econ variables (e.g., Econ1, Econ3, Econ5, etc.) have zero coefficients, suggesting that Lasso has removed them from the model. For the variables that are not zero, Lasso has shrunk their coefficients significantly. For example, COMPLETION.YEAR has a non-zero coefficient of 0.0931, indicating its contribution to the model.
+
+**Adaptive Lasso Regression Coefficients:**
+Adaptive Lasso, influenced by Ridge regression coefficients as penalty factors, shows a different pattern.
+Some of the coefficients that were zero in Lasso (e.g., PhysFin2, Econ5, Econ9, Econ2.lag1) still have small non-zero values in Adaptive Lasso, indicating that Adaptive Lasso assigns different penalties to variables based on their importance, using Ridge weights. Variables such as START.YEAR, COMPLETION.YEAR, and PhysFin1 still have non-zero coefficients, with some changes in magnitude compared to Lasso.
+
+
+
+
+
+
+
+

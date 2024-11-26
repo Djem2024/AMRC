@@ -1,0 +1,165 @@
+---
+title: "Exercise 6"
+subtitle: "for Advanced Methods for Regression and Classification"
+author: "Dzhamilia Kulikieva"
+date: 26.11.2024
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Linear Discrimant Analysis (LDA)
+
+## (a) Preprocessing and applying LDA 
+Just like in the previous task, we will convert the variable Status, EmpLen and Home to a numeric values to simplify modeling for LDA
+
+```{r, echo=TRUE}
+library(ROCit)
+data(Loan)
+# Convert Status to a numeric variable (0 and 1)
+Loan$Status <- as.numeric(Loan$Status) - 1
+
+Loan$EmpLen <- as.numeric(factor(Loan$EmpLen))  # Преобразуем в числовые уровни
+Loan$Home <- as.numeric(factor(Loan$Home))  
+
+str(Loan)
+
+```
+As column Term has only one unique value we will delete it because it doesn't contain any useful information for us.
+
+```{r, echo=TRUE}
+Loan$Term <- NULL
+```
+
+We should normalize the following variables: Amount, IntRate, ILR, Income, Score as they have a wide range of values and LDA is sensitive to the scale of variables.
+
+We will use Min-Max normalization:
+
+```{r, echo=TRUE}
+normalize <- function(x) {
+  return((x-min(x)) / (max(x) - min(x)))
+}
+
+Loan$Amount <- normalize(Loan$Amount)
+Loan$IntRate <- normalize(Loan$IntRate)
+Loan$ILR <- normalize(Loan$ILR)
+Loan$Income <- normalize(Loan$Income)
+Loan$Score <- normalize(Loan$Score)
+
+```
+
+
+```{r, echo=TRUE}
+# Split the data
+set.seed(1234)
+train_indices <- sample(1:nrow(Loan), size = 2/3*nrow(Loan))
+train_data <- Loan[train_indices, ]
+test_data <- Loan[-train_indices, ]
+
+```
+
+
+```{r, echo=TRUE}
+library(MASS)
+
+lda_model <- lda(Status ~., data = train_data)
+summary(lda_model)
+
+```
+The model warns about the collinearity of variables, which means that some variables are strongly correlated with each other. 
+
+```{r,echo=TRUE}
+cor(train_data[, -which(names(train_data) == "Status")])
+```
+For example, IntRate and ILR with a correlation of 0.9869. This can lead to problems with multicollinearity, which will make it difficult to correctly distribute weights between these features and, as a result, may degrade the performance of the model. We can simply exclude one of these features from our dataset before training the model.
+
+```{r, echo=TRUE}
+library(dplyr)
+
+# Deleting IntRate
+train_data <- train_data %>% select(-IntRate)
+
+```
+
+```{r, echo=TRUE}
+library(MASS)
+
+lda_model <- lda(Status ~., data = train_data)
+summary(lda_model)
+
+```
+
+
+ ## (b) Computation of the evaluation measures for the training data
+ 
+```{r, echo=TRUE}
+
+# Predict on training data
+train_predictions <- predict(lda_model, train_data)$class
+
+
+# Confusion matrix
+conf_matrix_train <- table(Predicted = train_predictions, Actual = train_data$Status)
+print(conf_matrix_train)
+
+# Compute evaluation metrics
+TP <- conf_matrix_train[2, 2]
+TN <- conf_matrix_train[1, 1]
+FP <- conf_matrix_train[2, 1]
+FN <- conf_matrix_train[1, 2]
+
+misclassification_rate <- (FP + FN) / sum(conf_matrix_train)
+TPR <- TP / (TP + FN) # Sensitivity
+TNR <- TN / (TN + FP) # Specificity
+balanced_accuracy <- (TPR + TNR) / 2
+
+list(
+  MisclassificationRate = misclassification_rate,
+  BalancedAccuracy = balanced_accuracy
+)
+
+```
+Misclassification Rate (0.14) indicates that the model has an error in 14% of predictions, which is a reasonably good result in most cases.
+
+Balanced Accuracy (0.516) suggests that the model is somewhat performing well, but there is room for improvement. If the classes are highly imbalanced, this metric reflects that the model might not be doing well with the minority class.
+
+
+## (c) Prediction of the group membership for the test data and the evaluation measures.
+
+```{r, echo=TRUE}
+
+# Predict on test data
+test_predictions <- predict(lda_model, test_data)$class
+
+# Confusion matrix for test data
+conf_matrix_test <- table(Predicted = test_predictions, Actual = test_data$Status)
+print(conf_matrix_test)
+
+# Compute evaluation metrics
+TP <- conf_matrix_test[2, 2]
+TN <- conf_matrix_test[1, 1]
+FP <- conf_matrix_test[2, 1]
+FN <- conf_matrix_test[1, 2]
+
+misclassification_rate_test <- (FP + FN) / sum(conf_matrix_test)
+TPR <- TP / (TP + FN) # Sensitivity
+TNR <- TN / (TN + FP) # Specificity
+balanced_accuracy_test <- (TPR + TNR) / 2
+
+list(
+  MisclassificationRate = misclassification_rate_test,
+  BalancedAccuracy = balanced_accuracy_test
+)
+
+
+```
+Misclassification Rate on the test data (0.1533) is slightly higher than on the training data (0.14), which is common and could indicate overfitting. This suggests that the model is better tailored to the training data and may not generalize as well to new data.
+
+Balanced Accuracy on the test data (0.5072) is a bit lower than on the training data (0.5165), which also points to some performance drop on test data. However, the results are still fairly close. It’s important to note that balanced accuracy is less sensitive to class imbalance than regular accuracy.
+
+
+
+
+

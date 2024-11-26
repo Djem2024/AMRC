@@ -1,0 +1,187 @@
+---
+title: "Exercise 3"
+subtitle: "for Advanced Methods for Regression and Classification"
+author: "Dzhamilia Kulikieva"
+date: 06.11.2024
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup-packages, include=FALSE}
+library(pls)
+```
+Let's use the data set “building.RData” from the last exercise, and make the same training/test split
+
+```{r, echo=TRUE}
+load("/Users/djem/Downloads/building.RData")
+head(df)
+
+
+```
+
+```{r, echo=TRUE}
+set.seed(2024)
+sample_index <- sample(1:nrow(df), size = floor(2/3 * nrow(df)))
+train_data <- df[sample_index, ]
+test_data <- df[-sample_index, ]
+```
+
+# 1. Principal component regression (PCR)
+
+## (1a) PCR with cross-validation into 10 segments
+
+```{r, echo=TRUE}
+pcr_model <- pcr(y ~ ., data = train_data, scale = TRUE, validation = "CV", segments = 10)
+```
+
+## (1b) Graph of cross-validation errors and selection of the optimal number of components 
+
+```{r, echo=TRUE}
+validationplot(pcr_model, val.type = "RMSEP")
+rmsep_values <- RMSEP(pcr_model)
+print(rmsep_values)
+```
+The optimal number of components may be that at which the RMSEP(CV and adjCV) is at a minimum level and remains relatively stable before it starts a sharp increase. 
+
+In our case, the RMSEP values continue to decrease until around 34 components, after which the error starts to stabilize and even increase slightly in some places. At around 34 components, the RMSEP reaches a relatively low and stable value before starting to increase significantly after 70 components.Therefore, 34 components seems to be an optimal choice, as adding more components does not significantly reduce the RMSEP and could lead to overfitting.
+
+Let's check the conclusion above by extracting the RMSEP value for the optimal number of components:
+
+```{r, echo=TRUE}
+optimal_rmsep <- min(rmsep_values$val)
+optimal_rmsep
+```
+At 34 components, the RMSEP values are approximately:
+CV (RMSEP): 0.2570
+adjCV (Adjusted RMSEP): 0.2546
+
+This value represents a low and stable point in the RMSEP, suggesting that 34 components could be considered an optimal choice. While the RMSEP values remain relatively low until around 40 components, choosing 34 components might balance complexity and accuracy effectively, as adding more components beyond this point provides diminishing returns.
+
+## (1c) A graph of predicted(cross-validated) values vs observed values with optimal model
+
+```{r, echo=TRUE}
+predplot(pcr_model, ncomp = 34, main = "Cross-validated predictions vs Measured values")
+```
+
+In an ideal model, the predicted values would be close to the actual values, and the points would be aligned along a 45° diagonal line (where predicted = measured).
+
+Here, while there is a general diagonal trend, there is still some scatter, which indicates minor prediction errors. This is expected even in a well-fitted model due to natural variability. In summary, the plot indicates that the model with 34 components is making reasonably accurate predictions on the cross-validated data, with most points following a roughly linear trend along the diagonal, although there is still some spread. This level of accuracy is consistent with a well-chosen number of components.
+
+## (1d) Prediction and RMSE based on test data
+
+```{r, echo=TRUE}
+pcr_pred <- predict(pcr_model, newdata = test_data, ncomp = 34)
+plot(test_data$y, pcr_pred, xlab = "Observed values", ylab = "Predicted values",
+     main = "Predicted vs Observed values for Test Data")
+abline(0, 1, col = "red")  # Adds a reference line with slope 1 for better comparison
+
+
+```
+
+```{r, echo=TRUE}
+pcr_rmse <- sqrt(mean((test_data$y - pcr_pred)^2))
+pcr_rmse
+```
+
+The points generally follow a diagonal trend along the red line, which represents a good prediction line where predicted = observed. The calculated RMSE of 0.2023 is relatively low, indicating that the average prediction error is small, and the model performs well on the test data. There is some scattering around the line, but most points are clustered closely, which suggests that the model captures the underlying pattern of the data effectively, with only minor deviations.
+
+# 2. Partial least squares regression (PLS)
+
+## (2a) PLS with cross-validation into 10 segments
+
+```{r, echo=TRUE}
+pls_model <- plsr(y ~ ., data = train_data, scale = TRUE, validation = "CV", segments = 10)
+```
+
+## (2b)-(2d) Similar steps for PLS. 
+## (2b) Graph of cross-validation errors and selection of the optimal number of components
+
+```{r, echo=TRUE}
+validationplot(pls_model, val.type = "RMSEP")
+rmse2_values <- RMSEP(pls_model)
+print(rmse2_values)
+```
+
+The optimal number of components for this model is 10, as it has the lowest cross-validated RMSE (CV) value of approximately 0.2544. After around 10 components, the CV value starts to stabilize and then gradually increases. This suggests that adding more components doesn't improve model accuracy and may even lead to overfitting.
+
+In comparison to PCR, which required 34 components, PLS achieves similar (or even better) predictive accuracy with a much smaller number of components.
+
+```{r, echo=TRUE}
+optimal_rmsep2 <- min(rmse2_values$val)
+optimal_rmsep2
+```
+
+## (2c) A graph of predicted(cross-validated) values vs observed values with optimal model
+
+```{r, echo=TRUE}
+predplot(pls_model, ncomp = 10, main = "Cross-validated predictions vs Measured values")
+```
+
+
+Most of the points are tightly clustered around the ideal 45° line, indicating that the predictions are consistent and that the model captures the trend in the data well. There are some minimal deviations from the line, particularly at the lower and upper ranges. 
+
+Compared to the first plot for the PCR model, this plot (for the PLS model) seems to show a slightly tighter clustering along the diagonal, suggesting that the PLS model's predictions may be slightly more consistent.
+
+
+## (2d) Prediction and RMSE based on test data
+
+```{r, echo=TRUE}
+pls_pred <- predict(pls_model, newdata = test_data, ncomp = 10)
+plot(test_data$y, pls_pred, xlab = "Observed values", ylab = "Predicted values",
+     main = "Predicted vs Observed values for Test Data")
+abline(0, 1, col = "red")  # Adds a reference line with slope 1 for better comparison
+
+
+```
+
+
+Both PCR and PLS plots show some degree of scatter, especially in the lower and upper ranges, but PLS plot might have slightly fewer outliers, indicating a more consistent prediction.
+
+
+```{r, echo=TRUE}
+pls_rmse <- sqrt(mean((test_data$y - pcr_pred)^2))
+pls_rmse
+```
+
+The calculated RMSE of 0.2023 for the PLS prediction model is identical to that of the PCR model, indicating that both models achieve the same level of predictive accuracy. Despite the difference in the number of components used (with PLS requiring fewer), the resulting RMSE remains unchanged, highlighting the efficiency of PLS in capturing essential information with a more compact model.
+
+
+## (2e) Comparison of PCR and PLS regression coefficients
+
+```{r, echo=TRUE}
+plot(coef(pcr_model, ncomp = 34), coef(pls_model, ncomp = 10), xlab = "PCR Coefficients", ylab = "PLS Coefficients")
+```
+
+Most of the coefficients are clustered near zero, indicating that both PCR and PLS assign similar, low weights to those features. Points deviating significantly from the line y=x show that PCR and PLS assign different weights to those particular features, suggesting a difference in how each model views their importance.
+
+In our case, while there are similarities in the coefficients, the differences highlight that PCR and PLS prioritize predictors differently, which could be due to PLS’s additional focus on the relationship between predictors and response during dimension reduction.
+
+# 3. Visualization of $scores and $loadings for PCR and PLS
+
+# PCR
+
+```{r, echo=TRUE}
+plot(pcr_model$scores[, 1:2], main = "PCR Scores")
+plot(pcr_model$loadings[, 1:2], main = "PCR Loadings")
+```
+
+
+# PLS
+
+```{r, echo=TRUE}
+plot(pls_model$scores[, 1:2], main = "PLS Scores")
+plot(pls_model$loadings[, 1:2], main = "PLS Loadings")
+```
+
+**Scores Plot (PCR & PLS)** show how the observations (data points) are distributed in the new component space. Observations that are close in these plots are similar in terms of their component scores.
+
+The PCR scores show a wider spread along the x-axis (Component 1), which might suggest that the PCR model captures more variance in the first component. In contrast, the PLS scores are more centralized and show a curved structure, indicating that PLS is capturing different relationships that are more specific to the target variable. This is consistent with how PLS maximizes the covariance with the response variable directly.
+
+
+**Loadings Plot (PCR & PLS)** shows how the original variables contribute to the first two components. Variables that are close together have a similar impact on the components.
+
+The loadings plots show how the original features contribute to the new components. In the PCR loading plot, the distribution is relatively spread out, with some features having stronger contributions in the positive or negative directions. In the PLS loading plot, the loadings are more tightly clustered, especially around Component 2. This pattern may indicate that PLS identifies a narrower set of features with a strong relationship to the target, as opposed to PCR, which focuses on maximizing variance without consideration of the target.
+
