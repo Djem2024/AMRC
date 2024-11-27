@@ -21,7 +21,7 @@ data(Loan)
 # Convert Status to a numeric variable (0 and 1)
 Loan$Status <- as.numeric(Loan$Status) - 1
 
-Loan$EmpLen <- as.numeric(factor(Loan$EmpLen))  # Преобразуем в числовые уровни
+Loan$EmpLen <- as.numeric(factor(Loan$EmpLen)) 
 Loan$Home <- as.numeric(factor(Loan$Home))  
 
 str(Loan)
@@ -92,7 +92,7 @@ summary(lda_model)
 ```
 
 
- ## (b) Computation of the evaluation measures for the training data
+## (b) Computation of the evaluation measures for the training data
  
 ```{r, echo=TRUE}
 
@@ -159,7 +159,297 @@ Misclassification Rate on the test data (0.1533) is slightly higher than on the 
 
 Balanced Accuracy on the test data (0.5072) is a bit lower than on the training data (0.5165), which also points to some performance drop on test data. However, the results are still fairly close. It’s important to note that balanced accuracy is less sensitive to class imbalance than regular accuracy.
 
+# 2. Comparison of Data Balancing Methods: Undersampling vs. Oversampling
+
+# (a) Undersampling
+
+Let's identify the number of samples in each group (n1, n2).
+
+```{r, echo=TRUE}
+
+n1 <- sum(train_data$Status == 0)
+n2 <- sum(train_data$Status == 1)
+min_n <- min(n1, n2)
+
+# Randomly sample min(n1, n2) observations from each group
+set.seed(123) # For reproducibility
+group_0 <- train_data[train_data$Status == 0, ]
+group_1 <- train_data[train_data$Status == 1, ]
+
+undersampled_0 <- group_0[sample(nrow(group_0), min_n), ]
+undersampled_1 <- group_1[sample(nrow(group_1), min_n), ]
+
+balanced_train <- rbind(undersampled_0, undersampled_1)
+
+```
+
+Train the LDA model on the balanced training set and compute evaluation metrics on the unchanged test set:
+```{r, echo=TRUE}
+
+library(MASS)
+lda_model_undersampled <- lda(Status ~ ., data = balanced_train)
+
+# Predictions on training set
+train_pred <- predict(lda_model_undersampled, newdata = balanced_train)$class
+
+
+# Calculate metrics
+
+
+# Confusion matrix
+conf_train <- table(Predicted = train_pred, Actual = balanced_train$Status)
+print(conf_train)
+
+# Compute evaluation metrics
+TP <- conf_train[2, 2]
+TN <- conf_train[1, 1]
+FP <- conf_train[2, 1]
+FN <- conf_train[1, 2]
+
+Train_misclassification_rate <- (FP + FN) / sum(conf_train)
+TPR <- TP / (TP + FN) # Sensitivity
+TNR <- TN / (TN + FP) # Specificity
+Train_balanced_accuracy <- (TPR + TNR) / 2
+
+list(
+  MisclassificationRate = Train_misclassification_rate,
+  BalancedAccuracy = Train_balanced_accuracy
+)
+
+
+```
+
+```{r, echo=TRUE}
+# Predictions on test set
+test_pred <- predict(lda_model_undersampled, newdata = test_data)$class
+
+
+# Confusion matrix for test data
+conf_test <- table(Predicted = test_pred, Actual = test_data$Status)
+print(conf_test)
+
+# Compute evaluation metrics
+TP <- conf_test[2, 2] # True Positives
+TN <- conf_test[1, 1] # True Negatives
+FP <- conf_test[2, 1] # False Positives
+FN <- conf_test[1, 2] # False Negatives
+
+misclassification_rate_test <- (FP + FN) / sum(conf_test) # Misclassification Rate
+TPR <- TP / (TP + FN)  # Sensitivity or True Positive Rate
+TNR <- TN / (TN + FP)  # Specificity or True Negative Rate
+balanced_accuracy_test <- (TPR + TNR) / 2 # Balanced Accuracy
+
+# Print the results
+list(
+  MisclassificationRate = misclassification_rate_test,
+  BalancedAccuracy = balanced_accuracy_test
+)
+
+```
+
+
+## (b) Oversampling
+
+Let's identify the number of samples in each group (n1, n2)
+
+```{r, echo=TRUE}
+
+max_n <- max(n1, n2)
+
+# Randomly sample with replacement from the smaller group to increase its size to max(n1, n2)
+set.seed(123) # For reproducibility
+oversampled_0 <- group_0[sample(nrow(group_0), max_n, replace = TRUE), ]
+oversampled_1 <- group_1[sample(nrow(group_1), max_n, replace = TRUE), ]
+
+balanced_train2 <- rbind(oversampled_0, oversampled_1)
 
 
 
+```
 
+Train the LDA model on the balanced training set and compute evaluation metrics on the unchanged test set (same as in (a)).
+
+```{r, echo=TRUE}
+
+lda_model_oversampled <- lda(Status ~ ., data = balanced_train2)
+
+# Predictions on training set
+train_pred2 <- predict(lda_model_oversampled, newdata = balanced_train2)$class
+
+
+# Calculate metrics
+# Confusion matrix
+conf_train2 <- table(Predicted = train_pred2, Actual = balanced_train2$Status)
+print(conf_train2)
+
+# Compute evaluation metrics
+TP <- conf_train2[2, 2]
+TN <- conf_train2[1, 1]
+FP <- conf_train2[2, 1]
+FN <- conf_train2[1, 2]
+
+Train_misclassification_rate <- (FP + FN) / sum(conf_train2)
+TPR <- TP / (TP + FN) # Sensitivity
+TNR <- TN / (TN + FP) # Specificity
+Train_balanced_accuracy <- (TPR + TNR) / 2
+
+list(
+  MisclassificationRate = Train_misclassification_rate,
+  BalancedAccuracy = Train_balanced_accuracy
+)
+```
+```{r, echo=TRUE}
+# Predictions on test set
+test_pred2 <- predict(lda_model_oversampled, newdata = test_data)$class
+
+
+# Confusion matrix for test data
+conf_test2 <- table(Predicted = test_pred2, Actual = test_data$Status)
+print(conf_test)
+
+# Compute evaluation metrics
+TP <- conf_test2[2, 2] # True Positives
+TN <- conf_test2[1, 1] # True Negatives
+FP <- conf_test2[2, 1] # False Positives
+FN <- conf_test2[1, 2] # False Negatives
+
+misclassification_rate_test <- (FP + FN) / sum(conf_test2) # Misclassification Rate
+TPR <- TP / (TP + FN)  # Sensitivity or True Positive Rate
+TNR <- TN / (TN + FP)  # Specificity or True Negative Rate
+balanced_accuracy_test <- (TPR + TNR) / 2 # Balanced Accuracy
+
+# Print the results
+list(
+  MisclassificationRate = misclassification_rate_test,
+  BalancedAccuracy = balanced_accuracy_test
+)
+
+```
+**Undersampling** appears to be more successful because it achieves higher balanced accuracy on both the training and test data compared to oversampling. The lower misclassification rate in the undersampling model also suggests that the model trained on a balanced dataset performs better at distinguishing between classes, especially when evaluated on unseen data (test data).
+
+**Oversampling leads** to a higher misclassification rate and slightly lower balanced accuracy, which indicates that the model might have overfitted to the oversampled training set, causing it to perform worse on the test set.
+
+Thus, undersampling is the more successful strategy in this case, as it achieves a better balance between model performance and generalization to the test data.
+
+# 3. Quadratic Discriminant Analysis (QDA)
+
+We can use already defined functions for undersampling and oversampling in previous steps:
+
+- `balanced_train` is the dataset after **undersampling**
+- `balanced_train2` is the dataset after **oversampling**.
+
+
+```{r, echo=TRUE}
+
+# Train QDA model on undersampled data
+qda_model_undersample <- qda(Status ~ ., data = balanced_train)
+
+# Train QDA model on oversampled data
+qda_model_oversample <- qda(Status ~ ., data = balanced_train2)
+
+# Predictions on test set for both models
+test_pred_undersample <- predict(qda_model_undersample, newdata = test_data)$class
+test_pred_oversample <- predict(qda_model_oversample, newdata = test_data)$class
+
+# Calculate confusion matrices for test set
+conf_test_undersample <- table(Predicted = test_pred_undersample, Actual = test_data$Status)
+conf_test_oversample <- table(Predicted = test_pred_oversample, Actual = test_data$Status)
+
+# Compute evaluation metrics for both models
+compute_metrics <- function(conf_matrix) {
+  TP <- conf_matrix[2, 2]
+  TN <- conf_matrix[1, 1]
+  FP <- conf_matrix[2, 1]
+  FN <- conf_matrix[1, 2]
+  
+  misclassification_rate <- (FP + FN) / sum(conf_matrix)
+  TPR <- TP / (TP + FN)  # Sensitivity
+  TNR <- TN / (TN + FP)  # Specificity
+  balanced_accuracy <- (TPR + TNR) / 2  # Balanced Accuracy
+  
+  return(list(
+    MisclassificationRate = misclassification_rate,
+    BalancedAccuracy = balanced_accuracy
+  ))
+}
+
+# Evaluate metrics for both models
+metrics_undersample <- compute_metrics(conf_test_undersample)
+metrics_oversample <- compute_metrics(conf_test_oversample)
+
+# Print results
+list(
+  UndersamplingMetrics = metrics_undersample,
+  OversamplingMetrics = metrics_oversample
+)
+```
+Balanced Accuracy for undersampling (0.5288) is higher than for oversampling (0.4745), which suggests that the model trained using undersampling is better at correctly classifying both classes (i.e., it's more balanced in terms of sensitivity and specificity).
+
+Misclassification Rate for undersampling (0.49) is lower than for oversampling (0.52), indicating that the undersampling method also reduces the overall number of misclassifications more effectively.
+
+**Thus, undersampling is the more effective strategy for QDA in this scenario, similar to what we observed with LDA earlier. It helps the model maintain better generalization and better performance on both classes.**
+
+
+# 4. Regularized Discriminant Analysis (RDA) with Undersampling and Oversampling
+
+Here we also can use already defined functions for undersampling and oversampling in previous steps:
+
+- `balanced_train` is the dataset after **undersampling**
+- `balanced_train2` is the dataset after **oversampling**.
+
+
+```{r, echo=TRUE}
+
+library(klaR)
+# Train RDA model on undersampled data
+rda_model_undersample <- rda(Status ~ ., data = balanced_train)
+
+# Train RDA model on oversampled data
+rda_model_oversample <- rda(Status ~ ., data = balanced_train2)
+
+# Predictions on test set for both models
+test_pred_rda_undersample <- predict(rda_model_undersample, newdata = test_data)$class
+test_pred_rda_oversample <- predict(rda_model_oversample, newdata = test_data)$class
+
+# Calculate confusion matrices for test set
+conf_test_rda_undersample <- table(Predicted = test_pred_rda_undersample, Actual = test_data$Status)
+conf_test_rda_oversample <- table(Predicted = test_pred_rda_oversample, Actual = test_data$Status)
+
+# Compute evaluation metrics for both models
+metrics_rda_undersample <- compute_metrics(conf_test_rda_undersample)
+metrics_rda_oversample <- compute_metrics(conf_test_rda_oversample)
+
+# Print results
+list(
+  UndersamplingMetricsRDA = metrics_rda_undersample,
+  OversamplingMetricsRDA = metrics_rda_oversample
+)
+
+```
+Undersampling yields again a lower Misclassification Rate (0.43) and higher Balanced Accuracy (0.5824) compared to oversampling.
+
+**Undersampling is the more effective strategy for RDA, as it provides better performance in terms of both Misclassification Rate and Balanced Accuracy. It appears to strike a better balance in learning from the training data and generalizing to unseen data.**
+
+In Regularized Discriminant Analysis (RDA), the parameters gamma and lambda control the regularization and blending between LDA and QDA. When gamma = 0, RDA is equivalent to Quadratic Discriminant Analysis (QDA).
+When gamma = 1, RDA simplifies to Linear Discriminant Analysis (LDA). Lambda shrinks the covariance matrices toward a diagonal form. When lambda = 0, the full covariance matrix is used. When lambda = 1, only the diagonal elements of the covariance matrix are used, making the model more robust to small sample sizes or noise.
+
+Let's extract gamma and lamda values for each model:
+```{r, echo=TRUE}
+
+# Gamma and Lambda for undersampling model
+undersample_regularization <- rda_model_undersample$regularization
+print(undersample_regularization)
+
+# Gamma and Lambda for oversampling model
+oversample_regularization <- rda_model_oversample$regularization
+print(oversample_regularization)
+
+
+```
+**Model with undersampling:**
+Gamma = 0.00028: Very close to 0, meaning the model heavily relies on QDA, offering maximum flexibility for class separation.
+Lambda = 0.958: High value, close to 1, indicating that the covariance matrix is highly shrunk toward a diagonal form, reducing the influence of feature interactions. 
+
+**Model with oversampling:**
+Gamma = 0.0446: Low value, meaning the model still leans towards QDA but incorporates some regularization toward LDA.
+Lambda = 0.0319: Very low value, meaning the model retains nearly full covariance matrices, allowing it to account for interactions between features.
